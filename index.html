@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Finance Tracker</title>
+    <style> body { font-family: sans-serif; padding: 20px; } .card { border: 1px solid #ccc; padding: 10px; margin: 10px 0; } </style>
+</head>
+<body>
+    <h1>My Finance Dashboard</h1>
+    
+    <div id="auth">
+        <input type="email" id="email" placeholder="Email">
+        <input type="password" id="pass" placeholder="Password">
+        <button onclick="login()">Login</button>
+    </div>
+
+    <div id="app" style="display:none;">
+        <h2>Summary</h2>
+        <div id="stats"></div>
+
+        <h3>Add Transaction</h3>
+        <input type="text" id="desc" placeholder="Description">
+        <input type="number" id="amt" placeholder="Amount">
+        <select id="type"><option value="INCOME">Income</option><option value="EXPENSE">Expense</option></select>
+        <input type="text" id="cat" placeholder="Category">
+        <button onclick="addTxn()">Add</button>
+
+        <h3>History</h3>
+        <div id="txns"></div>
+    </div>
+
+    <script>
+        let userId = null;
+        const API_URL = 'http://localhost:3000'; // Change to your Render URL later
+
+        async function login() {
+            const email = document.getElementById('email').value;
+            // Simplest login simulation
+            const res = await fetch(`${API_URL}/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password: document.getElementById('pass').value })
+            });
+            const data = await res.json();
+            if (data.id) {
+                userId = data.id;
+                document.getElementById('auth').style.display = 'none';
+                document.getElementById('app').style.display = 'block';
+                loadData();
+            } else { alert('Login failed'); }
+        }
+
+        async function loadData() {
+            // Fetch Transactions
+            const resTxn = await fetch(`${API_URL}/transactions/${userId}`);
+            const txns = await resTxn.json();
+            document.getElementById('txns').innerHTML = txns.map(t => 
+                `<div class="card"><b>${t.type}</b>: $${t.amount} - ${t.description} (${t.category})</div>`
+            ).join('');
+
+            // Fetch Dashboard Stats
+            const resDash = await fetch(`${API_URL}/dashboard/${userId}`);
+            const dash = await resDash.json();
+            document.getElementById('stats').innerHTML = JSON.stringify(dash.totals);
+        }
+
+        async function addTxn() {
+            await fetch(`${API_URL}/transactions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId,
+                    description: document.getElementById('desc').value,
+                    amount: document.getElementById('amt').value,
+                    type: document.getElementById('type').value,
+                    category: document.getElementById('cat').value,
+                    date: new Date()
+                })
+            });
+            loadData();
+        }
+    </script>
+</body>
+</html>

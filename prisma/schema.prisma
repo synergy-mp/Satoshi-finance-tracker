@@ -1,0 +1,37 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int           @id @default(autoincrement())
+  email     String        @unique
+  password  String        // Store simple text for speed (or hash if you have time)
+  name      String?
+  txns      Transaction[]
+  budgets   Budget[]
+}
+
+model Transaction {
+  id          Int      @id @default(autoincrement())
+  amount      Decimal  @db.Decimal(10, 2) // REQUIRED: Handles decimal precision [cite: 34]
+  type        String   // "INCOME" or "EXPENSE"
+  category    String   // e.g., "Food", "Salary"
+  date        DateTime @default(now())
+  description String?
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model Budget {
+  id       Int     @id @default(autoincrement())
+  category String
+  limit    Decimal @db.Decimal(10, 2)
+  userId   Int
+  user     User    @relation(fields: [userId], references: [id])
+}
