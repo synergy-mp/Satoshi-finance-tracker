@@ -38,7 +38,7 @@
             </div>
             <p id="auth-msg" style="color: red;"></p>
             <div style="text-align: center; margin-top: 20px;">
-                <a href="http://localhost:3000/auth/google" class="btn-google">🌐 Sign in with Google</a>
+                <a href="/auth/google" class="btn-google">🌐 Sign in with Google</a>
             </div>
         </div>
 
@@ -117,7 +117,8 @@
     </div>
 
     <script>
-        const API_URL = 'http://localhost:3000'; 
+        // UPDATED: Empty string ensures it uses the current domain (localhost or Render)
+        const API_URL = ''; 
         let userId = null;
         let myChart = null; 
         let reportChartInstance = null; 
