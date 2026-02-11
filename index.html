@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Finance Tracker - Demo</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -10,109 +11,366 @@
         input, select, button { padding: 10px; margin: 5px 0; width: 100%; box-sizing: border-box; }
         button { background: #007bff; color: white; border: none; cursor: pointer; border-radius: 4px; font-weight: bold; }
         button:hover { background: #0056b3; }
-        .btn-google { background: #db4437; color: white; padding: 10px; text-decoration: none; border-radius: 4px; display: block; text-align: center; margin-top: 10px; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+        .btn-danger { background: #dc3545; width: auto; padding: 5px 10px; font-size: 0.9em;}
+        .btn-success { background: #28a745; width: auto; padding: 5px 10px; font-size: 0.9em;}
+        .btn-google { background: #db4437; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; font-weight: bold; display: block; text-align: center; margin-top: 10px;}
         .card { border-bottom: 1px solid #eee; padding: 15px 0; display: flex; justify-content: space-between; align-items: center; }
-        .income { color: #28a745; font-weight: bold; } .expense { color: #dc3545; font-weight: bold; }
+        .income { color: #28a745; font-weight: bold; } 
+        .expense { color: #dc3545; font-weight: bold; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+        h2, h3, h4 { border-bottom: 2px solid #f4f4f9; padding-bottom: 5px; margin-top: 0; }
         .chart-container { width: 100%; margin: 20px auto; }
-        .header-controls { background: #e9ecef; padding: 15px; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .file-input-wrapper { background: #f8f9fa; border: 1px dashed #ccc; padding: 10px; text-align: center; border-radius: 4px; margin: 5px 0; }
+        .header-controls { background: #e9ecef; padding: 10px 15px; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>💰 Personal Finance Tracker</h1>
+        
         <div id="auth">
             <h3>Login or Register</h3>
-            <input type="email" id="email" placeholder="Email"><input type="password" id="pass" placeholder="Password">
-            <button onclick="login()">Login</button>
-            <a href="/auth/google" class="btn-google">🌐 Sign in with Google</a>
+            <input type="email" id="email" placeholder="Enter Email">
+            <input type="password" id="pass" placeholder="Enter Password">
+            <div style="display: flex; gap: 10px;">
+                <button onclick="login()">Login</button>
+                <button onclick="register()" style="background: #28a745;">Register</button>
+            </div>
+            <p id="auth-msg" style="color: red;"></p>
+            <div style="text-align: center; margin-top: 20px;">
+                <a href="/auth/google" class="btn-google">🌐 Sign in with Google</a>
+            </div>
         </div>
 
         <div id="app" style="display:none;">
             <div class="header-controls">
                 <div>
-                    <strong>🌎 Display:</strong>
-                    <select id="globalCurrency" onchange="loadData()" style="width: auto;"><option value="USD">USD ($)</option><option value="INR">INR (₹)</option><option value="EUR">EUR (€)</option></select>
+                    <label style="font-weight: bold; margin-right: 10px;">🌎 Display Currency:</label>
+                    <select id="globalCurrency" onchange="loadData()" style="width: auto; padding: 5px;">
+                        <option value="USD">USD ($)</option>
+                        <option value="INR">INR (₹)</option>
+                        <option value="EUR">EUR (€)</option>
+                    </select>
                 </div>
-                <button onclick="location.href='/'" style="width: auto; background: #6c757d;">Logout</button>
+                <button onclick="logout()" style="width: auto; background: #6c757d;">Logout</button>
             </div>
             
-            <h2 id="stats" style="text-align:center;">Loading stats...</h2>
-            <div class="chart-container" style="max-width: 600px;"><canvas id="financeChart"></canvas></div>
+            <div id="stats" style="font-size: 1.2em; margin-bottom: 10px; text-align: center; background: #f8f9fa; padding: 15px; border-radius: 5px;">
+                Loading stats...
+            </div>
+
+            <div class="chart-container" style="max-width: 600px;">
+                <canvas id="financeChart"></canvas>
+            </div>
+
+            <hr style="margin: 30px 0; border: 1px solid #eee;">
 
             <div class="grid">
                 <div>
                     <h3>Add Transaction</h3>
-                    <input type="text" id="desc" placeholder="Description">
-                    <input type="number" id="amt" placeholder="Amount">
-                    <select id="curr"><option value="USD">USD</option><option value="INR">INR</option></select>
-                    <select id="type"><option value="EXPENSE">Expense</option><option value="INCOME">Income</option></select>
-                    <input type="text" id="cat" placeholder="Category (e.g. Food)">
-                    <input type="file" id="receipt">
+                    <input type="text" id="desc" placeholder="Description (e.g. Salary, Rent)">
+                    <div style="display: flex; gap: 10px;">
+                        <input type="number" id="amt" placeholder="Amount" style="flex: 2;">
+                        <select id="currency" style="flex: 1;">
+                            <option value="INR">INR (₹)</option>
+                            <option value="USD">USD ($)</option>
+                            <option value="EUR">EUR (€)</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <select id="type">
+                            <option value="EXPENSE">Expense (-)</option>
+                            <option value="INCOME">Income (+)</option>
+                        </select>
+                        <input type="text" id="cat" placeholder="Category (e.g. Food)">
+                    </div>
+                    <div class="file-input-wrapper">
+                        <label for="receipt" style="font-size: 0.9em; color: #666;">🧾 Upload Receipt (Optional)</label>
+                        <input type="file" id="receipt" accept="image/*,.pdf" style="border:none; padding: 5px;">
+                    </div>
                     <button onclick="addTxn()">Add Transaction</button>
-                    
-                    <h3>Set Budget (in USD)</h3>
-                    <input type="text" id="bCat" placeholder="Category"><input type="number" id="bLim" placeholder="Limit">
+
+                    <h3 style="margin-top: 30px;">Set Budget Goal (in base USD)</h3>
+                    <input type="text" id="budgetCat" placeholder="Category Name (e.g., Food)">
+                    <input type="number" id="budgetLimit" placeholder="Budget Limit Amount">
                     <button onclick="setBudget()" style="background: #17a2b8;">Set Budget</button>
-                    <div id="budget-progress" style="margin-top:15px;"></div>
+                    
+                    <h4 style="margin-top: 15px;">Budget Progress</h4>
+                    <div id="budget-progress" style="background: #fff; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9em; max-height: 150px; overflow-y: auto;">
+                        Loading budgets...
+                    </div>
                 </div>
+
                 <div>
-                    <button onclick="downloadCSV()" style="background:#28a745;">📥 Download CSV Report</button>
-                    <div id="txns" style="margin-top:20px;"></div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h3 style="margin: 0; border: none;">Monthly Report</h3>
+                        <button onclick="downloadCSV()" class="btn-success">📥 Download CSV</button>
+                    </div>
+                    <div class="chart-container"><canvas id="reportChart"></canvas></div>
+                    <div id="reports" style="background: #f8f9fa; padding: 15px; border-radius: 4px; font-size: 0.9em; max-height: 200px; overflow-y: auto;"></div>
                 </div>
             </div>
+
+            <h3 style="margin-top: 40px;">Recent Transactions (Original Currencies)</h3>
+            <div id="txns"></div>
         </div>
     </div>
 
     <script>
-        let userId = null; let myChart = null;
+        // UPDATED: Empty string ensures it uses the current domain (localhost or Render)
+        const API_URL = ''; 
+        let userId = null;
+        let myChart = null; 
+        let reportChartInstance = null; 
+        let reportDataToExport = {}; 
+
+        // Helper to get currency symbol
+        function getSymbol(curr) {
+            if(curr === 'INR') return '₹';
+            if(curr === 'EUR') return '€';
+            return '$';
+        }
+
         window.onload = () => {
-            const params = new URLSearchParams(window.location.search);
-            if (params.get('userId')) { userId = params.get('userId'); document.getElementById('auth').style.display='none'; document.getElementById('app').style.display='block'; loadData(); }
+            const urlParams = new URLSearchParams(window.location.search);
+            const returnedUserId = urlParams.get('userId');
+            if (returnedUserId) {
+                userId = returnedUserId;
+                document.getElementById('auth').style.display = 'none';
+                document.getElementById('app').style.display = 'block';
+                window.history.replaceState({}, document.title, window.location.pathname); 
+                loadData();
+            }
         };
 
+        async function register() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('pass').value;
+            if(!email || !password) return alert("Fields required");
+            try {
+                const res = await fetch(`${API_URL}/register`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password, name: "Test User" })
+                });
+                if (res.ok) alert("✅ Registered! Now click Login.");
+            } catch (err) { alert("Error"); }
+        }
+
         async function login() {
-            const res = await fetch('/login', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({email: document.getElementById('email').value, password: document.getElementById('pass').value})});
-            const data = await res.json();
-            if(res.ok) { userId = data.id; document.getElementById('auth').style.display='none'; document.getElementById('app').style.display='block'; loadData(); }
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('pass').value;
+            try {
+                const res = await fetch(`${API_URL}/login`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    userId = data.id;
+                    document.getElementById('auth').style.display = 'none';
+                    document.getElementById('app').style.display = 'block';
+                    loadData();
+                } else document.getElementById('auth-msg').innerText = data.error;
+            } catch (err) { alert("❌ Backend error"); }
+        }
+
+        function logout() {
+            userId = null;
+            document.getElementById('auth').style.display = 'block';
+            document.getElementById('app').style.display = 'none';
+            if(myChart) myChart.destroy();
+            if(reportChartInstance) reportChartInstance.destroy();
         }
 
         async function loadData() {
-            const curr = document.getElementById('globalCurrency').value;
-            const resStats = await fetch(`/dashboard/${userId}?currency=${curr}`);
-            const stats = await resStats.json();
-            document.getElementById('stats').innerText = `Income: ${stats.income.toFixed(2)} | Expense: ${stats.expense.toFixed(2)}`;
+            await fetchTransactions();
+            await fetchDashboardStats();
+            await fetchReports();
+            await fetchBudgets();
+        }
+
+        async function fetchTransactions() {
+            const res = await fetch(`${API_URL}/transactions/${userId}`);
+            const txns = await res.json();
+            
+            document.getElementById('txns').innerHTML = txns.map(t => {
+                const symbol = getSymbol(t.currency);
+                const receiptLink = t.receiptUrl ? `<br><a href="${API_URL}${t.receiptUrl}" target="_blank" style="font-size: 0.8em; text-decoration: none;">📎 View Receipt</a>` : '';
+                return `<div class="card">
+                    <div>
+                        <strong>${t.description || 'No description'}</strong> 
+                        <small style="color: #666;">(${t.category?.name || 'Uncategorized'})</small><br>
+                        <small style="color: #999;">${new Date(t.date).toLocaleDateString()}</small>
+                        ${receiptLink}
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <span class="${t.type === 'INCOME' ? 'income' : 'expense'}">
+                            ${t.type === 'INCOME' ? '+' : '-'}${symbol}${parseFloat(t.amount).toFixed(2)}
+                        </span>
+                        <button class="btn-danger" onclick="deleteTxn(${t.id})">Delete</button>
+                    </div>
+                 </div>`;
+            }).join('');
+        }
+
+        async function fetchDashboardStats() {
+            const displayCurr = document.getElementById('globalCurrency').value;
+            const sym = getSymbol(displayCurr);
+            
+            const res = await fetch(`${API_URL}/dashboard/${userId}?currency=${displayCurr}`);
+            const dash = await res.json();
+            
+            const net = dash.income - dash.expense;
+            
+            document.getElementById('stats').innerHTML = 
+                `<span class="income">Total Income: ${sym}${dash.income.toFixed(2)}</span> | 
+                 <span class="expense">Total Expense: ${sym}${dash.expense.toFixed(2)}</span> | 
+                 <strong>Net Savings: ${sym}${net.toFixed(2)}</strong>`;
 
             const ctx = document.getElementById('financeChart').getContext('2d');
-            if(myChart) myChart.destroy();
-            myChart = new Chart(ctx, { type: 'bar', data: { labels: ['Income', 'Expense'], datasets: [{ data: [stats.income, stats.expense], backgroundColor: ['#28a745', '#dc3545'] }] } });
+            if (myChart) myChart.destroy();
 
-            const resTx = await fetch(`/transactions/${userId}`);
-            const txs = await resTx.json();
-            document.getElementById('txns').innerHTML = txs.map(t => `<div class="card"><span>${t.description} (${t.currency})</span><span class="${t.type.toLowerCase()}">${t.amount}</span></div>`).join('');
+            myChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Income', 'Expenses', 'Net Savings'],
+                    datasets: [{
+                        label: `Amount (${displayCurr})`,
+                        data: [dash.income, dash.expense, net],
+                        backgroundColor: ['rgba(40, 167, 69, 0.7)','rgba(220, 53, 69, 0.7)','rgba(0, 123, 255, 0.7)'],
+                        borderColor: ['rgb(40, 167, 69)','rgb(220, 53, 69)','rgb(0, 123, 255)'],
+                        borderWidth: 1
+                    }]
+                },
+                options: { responsive: true }
+            });
+        }
+
+        async function fetchReports() {
+            const displayCurr = document.getElementById('globalCurrency').value;
+            const sym = getSymbol(displayCurr);
+
+            const res = await fetch(`${API_URL}/reports/${userId}?currency=${displayCurr}`);
+            const reports = await res.json();
+            reportDataToExport = reports; 
             
-            const resB = await fetch(`/budgets/${userId}/progress?currency=${curr}`);
-            const budgets = await resB.json();
-            document.getElementById('budget-progress').innerHTML = budgets.map(b => `<div><strong>${b.category}</strong>: ${b.spent.toFixed(2)} / ${b.limit.toFixed(2)}</div>`).join('');
+            const months = Object.keys(reports).sort(); 
+            const incomeData = [], expenseData = [];
+
+            const reportHtml = months.map(m => {
+                const r = reports[m];
+                incomeData.push(r.income); expenseData.push(r.expense);
+                return `<strong>${m}</strong>: In: <span class="income">${sym}${r.income.toFixed(2)}</span> | Out: <span class="expense">${sym}${r.expense.toFixed(2)}</span><br>`;
+            }).join('');
+            
+            document.getElementById('reports').innerHTML = reportHtml || "No report data yet.";
+
+            const ctx = document.getElementById('reportChart').getContext('2d');
+            if (reportChartInstance) reportChartInstance.destroy();
+
+            reportChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: months,
+                    datasets: [
+                        { label: `Income (${displayCurr})`, data: incomeData, borderColor: 'rgb(40, 167, 69)', fill: false },
+                        { label: `Expenses (${displayCurr})`, data: expenseData, borderColor: 'rgb(220, 53, 69)', fill: false }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        async function fetchBudgets() {
+            const displayCurr = document.getElementById('globalCurrency').value;
+            const sym = getSymbol(displayCurr);
+
+            try {
+                const res = await fetch(`${API_URL}/budgets/${userId}/progress?currency=${displayCurr}`);
+                const budgets = await res.json();
+                
+                if (budgets.length === 0) {
+                    document.getElementById('budget-progress').innerHTML = "No budgets set yet."; return;
+                }
+
+                const html = budgets.map(b => {
+                    const percent = Math.min((b.spent / b.limit) * 100, 100);
+                    const isOver = b.spent > b.limit;
+                    const barColor = isOver ? '#dc3545' : '#28a745'; 
+
+                    return `<div style="margin-bottom: 10px;">
+                            <strong>${b.category}</strong>: ${sym}${b.spent.toFixed(2)} / ${sym}${b.limit.toFixed(2)} 
+                            ${isOver ? '<span style="color: red; font-weight:bold;">(OVER)</span>' : ''}
+                            <div style="background: #eee; width: 100%; height: 8px; border-radius: 4px; margin-top: 5px;">
+                                <div style="background: ${barColor}; width: ${percent}%; height: 100%; border-radius: 4px;"></div>
+                            </div>
+                        </div>`;
+                }).join('');
+                document.getElementById('budget-progress').innerHTML = html;
+            } catch (err) { document.getElementById('budget-progress').innerHTML = "Failed to load."; }
         }
 
         async function addTxn() {
-            const fd = new FormData();
-            fd.append('userId', userId); fd.append('description', document.getElementById('desc').value);
-            fd.append('amount', document.getElementById('amt').value); fd.append('currency', document.getElementById('curr').value);
-            fd.append('type', document.getElementById('type').value); fd.append('category', document.getElementById('cat').value);
-            if(document.getElementById('receipt').files[0]) fd.append('receipt', document.getElementById('receipt').files[0]);
-            await fetch('/transactions', { method: 'POST', body: fd });
-            loadData();
+            const desc = document.getElementById('desc').value;
+            const amt = document.getElementById('amt').value;
+            const type = document.getElementById('type').value;
+            const cat = document.getElementById('cat').value;
+            const currency = document.getElementById('currency').value;
+            const receiptFile = document.getElementById('receipt').files[0];
+
+            if (!desc || !amt) return alert("Enter details");
+
+            const formData = new FormData();
+            formData.append('userId', userId); formData.append('description', desc);
+            formData.append('amount', amt); formData.append('type', type);
+            formData.append('category', cat); formData.append('currency', currency);
+            if (receiptFile) formData.append('receipt', receiptFile);
+
+            await fetch(`${API_URL}/transactions`, { method: 'POST', body: formData });
+            
+            document.getElementById('desc').value = ""; document.getElementById('amt').value = "";
+            document.getElementById('receipt').value = "";
+            loadData(); 
+        }
+
+        async function deleteTxn(txnId) {
+            if(!confirm("Are you sure?")) return;
+            await fetch(`${API_URL}/transactions/${txnId}`, { method: 'DELETE' });
+            loadData(); 
         }
 
         async function setBudget() {
-            await fetch('/budgets', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({userId, category: document.getElementById('bCat').value, limit: document.getElementById('bLim').value})});
-            loadData();
+            const cat = document.getElementById('budgetCat').value;
+            const limit = document.getElementById('budgetLimit').value;
+            if(!cat || !limit) return alert("Enter Category Name and Limit");
+
+            await fetch(`${API_URL}/budgets`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId, category: cat, limit }) 
+            });
+            
+            document.getElementById('budgetCat').value = ""; document.getElementById('budgetLimit').value = "";
+            await fetchBudgets();
         }
 
         function downloadCSV() {
-            window.location.href = `/transactions/${userId}`; // Simplified for demo
+            if (Object.keys(reportDataToExport).length === 0) return alert("No data to export.");
+            const displayCurr = document.getElementById('globalCurrency').value;
+
+            let csvContent = `data:text/csv;charset=utf-8,Month,Total Income (${displayCurr}),Total Expense (${displayCurr}),Net Savings (${displayCurr})\n`;
+            Object.keys(reportDataToExport).sort().forEach(month => {
+                const inc = reportDataToExport[month].income;
+                const exp = reportDataToExport[month].expense;
+                csvContent += `${month},${inc.toFixed(2)},${exp.toFixed(2)},${(inc - exp).toFixed(2)}\n`;
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `monthly_report_${displayCurr}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
     </script>
 </body>
