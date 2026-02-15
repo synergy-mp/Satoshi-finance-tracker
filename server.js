@@ -22,7 +22,7 @@ dns.setDefaultResultOrder("ipv4first");
 app.use(cors());
 app.use(express.json());
 
-// --- ROBUST BITCOIN PRICE LOGIC ---
+// --- ROBUST BITCOIN PRICE LOGIC (WATERFALL STRATEGY) ---
 let EXCHANGE_RATES = { 
   USD: 1.0, 
   INR: 83.0, 
@@ -30,56 +30,87 @@ let EXCHANGE_RATES = {
   SATS: 0.0000002 
 };
 
-// Default close to real market price to avoid scaring users if APIs fail
-let CURRENT_BTC_PRICE = 96000; 
+// Initialize with 0 so we know if it hasn't loaded yet
+let CURRENT_BTC_PRICE = 0; 
+
+async function getPriceFromBinance() {
+  try {
+    const res = await axios.get('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT', { timeout: 3000 });
+    return parseFloat(res.data.price);
+  } catch (e) { return null; }
+}
+
+async function getPriceFromCoinbase() {
+  try {
+    const res = await axios.get('https://api.coinbase.com/v2/prices/spot?currency=USD', { timeout: 3000 });
+    return parseFloat(res.data.data.amount);
+  } catch (e) { return null; }
+}
+
+async function getPriceFromBlockchainInfo() {
+  try {
+    const res = await axios.get('https://blockchain.info/ticker', { timeout: 3000 });
+    return res.data.USD.last;
+  } catch (e) { return null; }
+}
 
 async function updateExchangeRates() {
-  try {
-    // Attempt 1: CoinGecko
-    console.log("⏳ Fetching BTC Price from CoinGecko...");
-    const res = await axios.get('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd,inr,eur', { timeout: 5000 });
-    
-    const btcPrice = res.data.bitcoin;
-    CURRENT_BTC_PRICE = btcPrice.usd;
-    EXCHANGE_RATES.INR = btcPrice.inr / btcPrice.usd * 83; // Approx adjustment
-    EXCHANGE_RATES.EUR = btcPrice.eur / btcPrice.usd * 0.92;
-    EXCHANGE_RATES.SATS = btcPrice.usd / 100000000; 
-    console.log(`✅ Price Updated (CoinGecko): $${CURRENT_BTC_PRICE}`);
+  console.log("⏳ Fetching live Bitcoin price...");
+  
+  // Try Binance first (Fastest & most reliable)
+  let price = await getPriceFromBinance();
+  
+  // Fallback to Coinbase if Binance fails
+  if (!price) {
+    console.warn("⚠️ Binance failed, trying Coinbase...");
+    price = await getPriceFromCoinbase();
+  }
 
-  } catch (error) {
-    console.warn("⚠️ CoinGecko failed, trying CoinDesk fallback...");
-    try {
-      // Attempt 2: CoinDesk (Fallback)
-      const res = await axios.get('https://api.coindesk.com/v1/bpi/currentprice.json', { timeout: 5000 });
-      CURRENT_BTC_PRICE = res.data.bpi.USD.rate_float;
-      EXCHANGE_RATES.SATS = CURRENT_BTC_PRICE / 100000000;
-      console.log(`✅ Price Updated (CoinDesk): $${CURRENT_BTC_PRICE}`);
-    } catch (err2) {
-      console.error("❌ All Price APIs failed. Using last known price.");
-    }
+  // Fallback to Blockchain.com if both fail
+  if (!price) {
+    console.warn("⚠️ Coinbase failed, trying Blockchain.info...");
+    price = await getPriceFromBlockchainInfo();
+  }
+
+  if (price) {
+    CURRENT_BTC_PRICE = price;
+    
+    // Update derived rates
+    // 1 BTC = 100,000,000 Sats
+    EXCHANGE_RATES.SATS = price / 100000000; 
+    
+    // Approximate Fiat Rates (Base 1 USD)
+    EXCHANGE_RATES.INR = 83.0; 
+    EXCHANGE_RATES.EUR = 0.92;
+
+    console.log(`✅ Bitcoin Price Updated: $${CURRENT_BTC_PRICE.toLocaleString()}`);
+  } else {
+    console.error("❌ ALL Price APIs failed. Retrying in 1 minute.");
   }
 }
 
-// Update immediately and then every 2 minutes
+// Update immediately and then every 1 minute
 updateExchangeRates();
-setInterval(updateExchangeRates, 120000); 
+setInterval(updateExchangeRates, 60000); 
 
 function convertCurrency(amount, fromCurrency, toCurrency) {
   if (fromCurrency === toCurrency) return amount;
   
+  // Avoid division by zero if price hasn't loaded
+  const satsRate = EXCHANGE_RATES.SATS || 0.0000002;
+
   let amountInUSD;
   // Convert Input to USD
   if (fromCurrency === "SATS") {
-    amountInUSD = amount * EXCHANGE_RATES.SATS;
+    amountInUSD = amount * satsRate;
   } else {
-    // Basic fiat conversion
-    if(fromCurrency === "INR") amountInUSD = amount / 83.0; // Simple hardcoded fallback for fiat-to-fiat
+    if(fromCurrency === "INR") amountInUSD = amount / 83.0; 
     else if(fromCurrency === "EUR") amountInUSD = amount / 0.92;
     else amountInUSD = amount; 
   }
 
   // Convert USD to Target
-  if (toCurrency === "SATS") return amountInUSD / EXCHANGE_RATES.SATS;
+  if (toCurrency === "SATS") return amountInUSD / satsRate;
   if (toCurrency === "INR") return amountInUSD * 83.0;
   if (toCurrency === "EUR") return amountInUSD * 0.92;
   return amountInUSD;
@@ -134,6 +165,7 @@ const transporter = nodemailer.createTransport({
 
 // --- PUBLIC TICKER ENDPOINT ---
 app.get("/api/ticker", (req, res) => {
+    // If price is still 0 (loading), return a temporary 'Loading' state or the last known good value
     res.json({ price: CURRENT_BTC_PRICE });
 });
 
@@ -144,7 +176,10 @@ app.get("/api/bitcoin-balance/:address", async (req, res) => {
     const mempoolStats = response.data.mempool_stats;
     const satBalance = (chainStats.funded_txo_sum - chainStats.spent_txo_sum) + 
                        (mempoolStats.funded_txo_sum - mempoolStats.spent_txo_sum);
-    res.json({ sats: satBalance, usd_value: satBalance * EXCHANGE_RATES.SATS });
+    
+    // Calculate value based on live price
+    const satsRate = EXCHANGE_RATES.SATS || 0.0000002;
+    res.json({ sats: satBalance, usd_value: satBalance * satsRate });
   } catch (error) { res.status(500).json({ error: "Invalid Address" }); }
 });
 
