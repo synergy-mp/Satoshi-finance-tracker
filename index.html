@@ -19,9 +19,28 @@
     <div class="container">
         <div id="btc-ticker" class="btc-ticker">Loading Bitcoin Price...</div>
 
-        <div id="auth">
+        <div id="auth" style="max-width: 400px; margin: 0 auto; text-align: center;">
             <h2>🔐 Login to Satoshi Tracker</h2>
-            <a href="/auth/google"><button style="background: #db4437;">Sign in with Google</button></a>
+            
+            <input type="email" id="email" placeholder="Email Address" style="margin-bottom: 10px;">
+            <input type="password" id="pass" placeholder="Password" style="margin-bottom: 15px;">
+            
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <button onclick="login()" style="flex: 1;">Login</button>
+                <button onclick="register()" style="flex: 1; background: #28a745;">Register</button>
+            </div>
+            
+            <p id="auth-msg" style="color: #dc3545; font-size: 0.9em; margin: 5px 0; min-height: 20px;"></p>
+            
+            <div style="display: flex; align-items: center; margin: 15px 0;">
+                <hr style="flex: 1; border: none; border-top: 1px solid #ddd;">
+                <span style="padding: 0 10px; color: #888; font-size: 0.9em;">OR</span>
+                <hr style="flex: 1; border: none; border-top: 1px solid #ddd;">
+            </div>
+
+            <a href="/auth/google" style="text-decoration: none;">
+                <button style="background: #db4437; width: 100%;">🌐 Sign in with Google</button>
+            </a>
         </div>
 
         <div id="app" style="display:none;">
@@ -70,10 +89,7 @@
         let myChart = null;
 
         window.onload = () => {
-            // 1. Fetch Price Immediately (Even if not logged in)
             fetchTicker();
-
-            // 2. Check Login Status
             const params = new URLSearchParams(window.location.search);
             if (params.get('userId')) { 
                 userId = params.get('userId'); 
@@ -83,14 +99,59 @@
             }
         };
 
+        // --- NATIVE AUTHENTICATION LOGIC (NEW) ---
+        async function register() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('pass').value;
+            const msgEl = document.getElementById('auth-msg');
+            
+            if(!email || !password) return msgEl.innerText = "Please enter both email and password.";
+            
+            msgEl.innerText = "Registering...";
+            const res = await fetch('/register', {
+                method: 'POST', headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify({email, password})
+            });
+            const data = await res.json();
+            
+            if(res.ok) {
+                alert("✅ Registration successful! Logging you in...");
+                userId = data.id;
+                document.getElementById('auth').style.display = 'none';
+                document.getElementById('app').style.display = 'block';
+                loadData();
+            } else { msgEl.innerText = data.error || "Registration failed."; }
+        }
+
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('pass').value;
+            const msgEl = document.getElementById('auth-msg');
+
+            if(!email || !password) return msgEl.innerText = "Please enter both email and password.";
+            
+            msgEl.innerText = "Logging in...";
+            const res = await fetch('/login', {
+                method: 'POST', headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify({email, password})
+            });
+            const data = await res.json();
+            
+            if(res.ok) {
+                userId = data.id;
+                document.getElementById('auth').style.display = 'none';
+                document.getElementById('app').style.display = 'block';
+                loadData();
+            } else { msgEl.innerText = data.error || "Invalid email or password."; }
+        }
+
+        // --- STANDARD APP LOGIC ---
         async function fetchTicker() {
             try {
                 const res = await fetch('/api/ticker');
                 const data = await res.json();
                 document.getElementById('btc-ticker').innerText = `🔥 Live Bitcoin Price: $${Math.floor(data.price).toLocaleString()} USD`;
-            } catch (e) {
-                console.log("Ticker waiting for server...");
-            }
+            } catch (e) { console.log("Ticker waiting for server..."); }
         }
 
         async function loadData() {
@@ -98,7 +159,6 @@
             const res = await fetch(`/dashboard/${userId}?currency=${curr}`);
             const data = await res.json();
             
-            // Also update ticker here to keep it fresh
             if(data.btc_price) {
                 document.getElementById('btc-ticker').innerText = `🔥 Live Bitcoin Price: $${Math.floor(data.btc_price).toLocaleString()} USD`;
             }

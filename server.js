@@ -23,14 +23,7 @@ app.use(cors());
 app.use(express.json());
 
 // --- ROBUST BITCOIN PRICE LOGIC (WATERFALL STRATEGY) ---
-let EXCHANGE_RATES = { 
-  USD: 1.0, 
-  INR: 83.0, 
-  EUR: 0.92, 
-  SATS: 0.0000002 
-};
-
-// Initialize with 0 so we know if it hasn't loaded yet
+let EXCHANGE_RATES = { USD: 1.0, INR: 83.0, EUR: 0.92, SATS: 0.0000002 };
 let CURRENT_BTC_PRICE = 0; 
 
 async function getPriceFromBinance() {
@@ -56,76 +49,47 @@ async function getPriceFromBlockchainInfo() {
 
 async function updateExchangeRates() {
   console.log("⏳ Fetching live Bitcoin price...");
-  
-  // Try Binance first (Fastest & most reliable)
   let price = await getPriceFromBinance();
-  
-  // Fallback to Coinbase if Binance fails
-  if (!price) {
-    console.warn("⚠️ Binance failed, trying Coinbase...");
-    price = await getPriceFromCoinbase();
-  }
-
-  // Fallback to Blockchain.com if both fail
-  if (!price) {
-    console.warn("⚠️ Coinbase failed, trying Blockchain.info...");
-    price = await getPriceFromBlockchainInfo();
-  }
+  if (!price) { console.warn("⚠️ Binance failed, trying Coinbase..."); price = await getPriceFromCoinbase(); }
+  if (!price) { console.warn("⚠️ Coinbase failed, trying Blockchain.info..."); price = await getPriceFromBlockchainInfo(); }
 
   if (price) {
     CURRENT_BTC_PRICE = price;
-    
-    // Update derived rates
-    // 1 BTC = 100,000,000 Sats
     EXCHANGE_RATES.SATS = price / 100000000; 
-    
-    // Approximate Fiat Rates (Base 1 USD)
     EXCHANGE_RATES.INR = 83.0; 
     EXCHANGE_RATES.EUR = 0.92;
-
     console.log(`✅ Bitcoin Price Updated: $${CURRENT_BTC_PRICE.toLocaleString()}`);
-  } else {
-    console.error("❌ ALL Price APIs failed. Retrying in 1 minute.");
-  }
+  } else { console.error("❌ ALL Price APIs failed. Retrying in 1 minute."); }
 }
 
-// Update immediately and then every 1 minute
 updateExchangeRates();
 setInterval(updateExchangeRates, 60000); 
 
 function convertCurrency(amount, fromCurrency, toCurrency) {
   if (fromCurrency === toCurrency) return amount;
-  
-  // Avoid division by zero if price hasn't loaded
   const satsRate = EXCHANGE_RATES.SATS || 0.0000002;
-
   let amountInUSD;
-  // Convert Input to USD
-  if (fromCurrency === "SATS") {
-    amountInUSD = amount * satsRate;
-  } else {
+  if (fromCurrency === "SATS") amountInUSD = amount * satsRate;
+  else {
     if(fromCurrency === "INR") amountInUSD = amount / 83.0; 
     else if(fromCurrency === "EUR") amountInUSD = amount / 0.92;
     else amountInUSD = amount; 
   }
-
-  // Convert USD to Target
   if (toCurrency === "SATS") return amountInUSD / satsRate;
   if (toCurrency === "INR") return amountInUSD * 83.0;
   if (toCurrency === "EUR") return amountInUSD * 0.92;
   return amountInUSD;
 }
 
-// --- SERVE FRONTEND ---
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
-});
+// --- SERVE FRONTEND & UPLOADS ---
+app.get("/", (req, res) => res.sendFile(path.join(__dirname, "index.html")));
 
 const uploadDir = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 app.use("/uploads", express.static(uploadDir));
 const upload = multer({ dest: "uploads/" });
 
+// --- SESSION & PASSPORT ---
 app.use(session({
   secret: process.env.SESSION_SECRET || "secret",
   resave: false, saveUninitialized: false
@@ -142,11 +106,7 @@ passport.use(new GoogleStrategy({
   async (accessToken, refreshToken, profile, done) => {
     try {
       let user = await prisma.user.findUnique({ where: { email: profile.emails[0].value } });
-      if (!user) {
-        user = await prisma.user.create({
-          data: { email: profile.emails[0].value, name: profile.displayName, password: "oauth" }
-        });
-      }
+      if (!user) user = await prisma.user.create({ data: { email: profile.emails[0].value, name: profile.displayName, password: "oauth" } });
       return done(null, user);
     } catch (err) { return done(err, null); }
   }
@@ -158,36 +118,49 @@ passport.deserializeUser(async (id, done) => {
   done(null, user);
 });
 
+// --- EMAIL ALERTS ---
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com", port: 465, secure: true,
   auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
 });
 
-// --- PUBLIC TICKER ENDPOINT ---
-app.get("/api/ticker", (req, res) => {
-    // If price is still 0 (loading), return a temporary 'Loading' state or the last known good value
-    res.json({ price: CURRENT_BTC_PRICE });
+// --- NATIVE AUTHENTICATION ROUTES (NEW) ---
+app.post("/register", async (req, res) => {
+  const { email, password, name } = req.body;
+  try {
+    const user = await prisma.user.create({ data: { email, password, name: name || "Satoshi User" } });
+    res.json({ id: user.id, email: user.email });
+  } catch (e) { res.status(500).json({ error: "Email already exists or server error." }); }
 });
+
+app.post("/login", async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (user && user.password === password) res.json({ id: user.id, email: user.email });
+    else res.status(401).json({ error: "Invalid email or password" });
+  } catch (e) { res.status(500).json({ error: "Server error" }); }
+});
+
+// --- PUBLIC TICKER & BITCOIN ENDPOINTS ---
+app.get("/api/ticker", (req, res) => res.json({ price: CURRENT_BTC_PRICE }));
 
 app.get("/api/bitcoin-balance/:address", async (req, res) => {
   try {
     const response = await axios.get(`https://mempool.space/api/address/${req.params.address}`);
     const chainStats = response.data.chain_stats;
     const mempoolStats = response.data.mempool_stats;
-    const satBalance = (chainStats.funded_txo_sum - chainStats.spent_txo_sum) + 
-                       (mempoolStats.funded_txo_sum - mempoolStats.spent_txo_sum);
-    
-    // Calculate value based on live price
+    const satBalance = (chainStats.funded_txo_sum - chainStats.spent_txo_sum) + (mempoolStats.funded_txo_sum - mempoolStats.spent_txo_sum);
     const satsRate = EXCHANGE_RATES.SATS || 0.0000002;
     res.json({ sats: satBalance, usd_value: satBalance * satsRate });
   } catch (error) { res.status(500).json({ error: "Invalid Address" }); }
 });
 
+// --- GOOGLE OAUTH ROUTES ---
 app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
-app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/' }), (req, res) => {
-    res.redirect(`/?userId=${req.user.id}`);
-});
+app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/' }), (req, res) => res.redirect(`/?userId=${req.user.id}`));
 
+// --- TRANSACTION ROUTES ---
 app.get("/transactions/:userId", async (req, res) => {
   try {
     const txns = await prisma.transaction.findMany({ where: { userId: Number(req.params.userId) }, include: { category: true } });
@@ -241,7 +214,7 @@ app.get("/dashboard/:userId", async (req, res) => {
   } catch (e) { res.status(500).json({ error: "Error" }); }
 });
 
-// ... Keep existing budgets/reports endpoints (unchanged) ...
+// --- BUDGET ROUTES ---
 app.post("/budgets", async (req, res) => {
   const { userId, category, limit } = req.body;
   try {
